@@ -1,4 +1,6 @@
 <script setup>
+import { computed } from 'vue'
+import { useMetricsStore } from './stores/metrics'
 import { useWebSocket } from './composables/useWebSocket'
 import EnergyPanel from './components/EnergyPanel.vue'
 import ComfortPanel from './components/ComfortPanel.vue'
@@ -10,6 +12,8 @@ import LLMLogPanel from './components/LLMLogPanel.vue'
 
 // Initialize WebSocket connection on app mount
 const { isConnected } = useWebSocket()
+const store = useMetricsStore()
+const agentStatus = computed(() => store.agentStatus)
 </script>
 
 <template>
@@ -19,6 +23,12 @@ const { isConnected } = useWebSocket()
         <h1 class="text-gradient">EcoPulse</h1>
         <p class="subtitle">Intelligent Building Management System</p>
       </div>
+      
+      <div v-if="agentStatus === 'thinking'" class="agent-thinking">
+        <span class="brain-icon pulse">🧠</span>
+        <span class="thinking-text">Agent analyzing thermal physics...</span>
+      </div>
+
       <div class="connection-status">
         <div class="status-indicator" :class="{ connected: isConnected }"></div>
         <span>{{ isConnected ? 'Live' : 'Connecting...' }}</span>
@@ -87,6 +97,30 @@ const { isConnected } = useWebSocket()
   padding: 0.5rem 1rem;
   border-radius: 9999px;
   border: 1px solid var(--border-glass);
+}
+
+.agent-thinking {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1.5rem;
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 9999px;
+  color: #c4b5fd;
+  font-weight: 500;
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.2);
+}
+
+.pulse {
+  animation: pulse 1.5s infinite;
+  display: inline-block;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .status-indicator {

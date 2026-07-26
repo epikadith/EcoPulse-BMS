@@ -22,6 +22,8 @@ export function useWebSocket(url = 'ws://localhost:8765') {
           store.updateMetrics(message.data)
         } else if (message.type === 'agent_action') {
           store.addAgentLog(message.data)
+        } else if (message.type === 'agent_status') {
+          store.setAgentStatus(message.data.status)
         }
       } catch (err) {
         console.error('Failed to parse WebSocket message:', err)

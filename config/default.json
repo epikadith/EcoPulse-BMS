@@ -17,7 +17,7 @@
       "temperature_low": 20.0
     }
   },
-  "zones": ["south", "north", "core"],
+  "zones": ["space1-1", "space2-1", "space3-1", "space4-1", "space5-1"],
   "constraints": {
     "temperature_min": 20.0,
     "temperature_max": 24.0,

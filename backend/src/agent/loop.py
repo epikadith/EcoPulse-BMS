@@ -79,7 +79,7 @@ class AgentOrchestrator:
                 return True
         return False
 
-    async def run_step(self) -> dict:
+    async def run_step(self, metrics: dict = None) -> dict:
         """
         Execute a single agent reasoning cycle.
 
@@ -92,10 +92,11 @@ class AgentOrchestrator:
         7. Execute valid actions via MCP tools
         8. Log decision for dashboard
         """
-        # 1. Fetch state
-        status_result = await self.mcp_server.call_tool("get_building_status", {})
-        status_json = _extract_text(status_result)
-        metrics = json.loads(status_json)
+        # 1. Fetch state (Passed in directly from simulator queue)
+        if metrics is None:
+            status_result = await self.mcp_server.call_tool("get_building_status", {})
+            status_json = _extract_text(status_result)
+            metrics = json.loads(status_json)
 
         # 2. Structure into Polars DataFrame
         df = metrics_to_dataframe(metrics)
@@ -109,11 +110,11 @@ class AgentOrchestrator:
         try:
             llm_response = await asyncio.wait_for(
                 asyncio.to_thread(query_llm, user_prompt, self.system_prompt, self.config),
-                timeout=120.0
+                timeout=600.0
             )
             logger.info("LLM query returned successfully.")
         except asyncio.TimeoutError:
-            logger.error("LLM query timed out after 120 seconds.")
+            logger.error("LLM query timed out after 600 seconds.")
             llm_response = {"error": "LLM timed out"}
         except Exception as e:
             logger.error(f"LLM query raised exception: {e}")
@@ -165,6 +166,20 @@ class AgentOrchestrator:
 
         return decision
 
+    async def _ui_broadcast_loop(self):
+        """Continuously broadcasts fast non-blocking metrics from EnergyPlus to the frontend."""
+        import queue
+        logger.info("UI broadcast loop started.")
+        while True:
+            try:
+                metrics = await asyncio.to_thread(self.simulator.ui_queue.get, timeout=1.0)
+                await broadcast_message({"type": "metrics", "data": metrics})
+            except queue.Empty:
+                pass
+            except Exception as e:
+                logger.error(f"UI broadcast error: {e}")
+                await asyncio.sleep(1)
+
     async def run_loop(self):
         """
         Run the continuous agent control loop with both fixed-interval
@@ -173,28 +188,45 @@ class AgentOrchestrator:
         logger.info("Agent orchestrator loop started.")
         interval = self.config.control_loop.interval_seconds
 
-        while True:
-            # Advance simulation
-            self.simulator.tick(15.0)
+        # Start the UI fast track
+        asyncio.create_task(self._ui_broadcast_loop())
 
-            # Get current metrics for broadcasting and threshold checking
-            metrics = self.simulator.get_metrics()
+        while True:
+            # 1. Wait for EnergyPlus to reach a zone timestep and produce metrics
+            logger.info("Waiting for EnergyPlus timestep metrics...")
+            metrics = await asyncio.to_thread(self.simulator.metrics_queue.get)
+
+            # Broadcast current metrics
             await broadcast_message({"type": "metrics", "data": metrics})
 
-            # Always run on fixed interval, but also check thresholds
             threshold_triggered = self._check_thresholds(metrics)
 
             if threshold_triggered:
                 logger.info("Running reactive agent cycle (threshold triggered)")
 
-            # Run reasoning
-            result = await self.run_step()
+            # Tell UI we are thinking
+            await broadcast_message({"type": "agent_status", "data": {"status": "thinking"}})
+
+            # 2. Run reasoning
+            result = await self.run_step(metrics)
+
+            # Tell UI we are done
+            await broadcast_message({"type": "agent_status", "data": {"status": "idle"}})
 
             # Broadcast decision
             await broadcast_message({"type": "agent_action", "data": result})
 
-            # Wait for the next interval
-            await asyncio.sleep(interval)
+            # 3. Pass actions back to EnergyPlus to continue the simulation
+            actions_to_simulator = []
+            for res in result.get("actions_executed", []):
+                if "result" in res:
+                    try:
+                        action_data = json.loads(res["result"])
+                        actions_to_simulator.append(action_data)
+                    except json.JSONDecodeError:
+                        pass
+            
+            self.simulator.actions_queue.put(actions_to_simulator)
 
 
 # ──────────────────────────────────────────────────────────────

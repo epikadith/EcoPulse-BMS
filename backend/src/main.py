@@ -10,7 +10,7 @@ import os
 import sys
 
 from src.config.settings import load_config
-from src.simulator.building import BuildingSimulator
+from src.simulator.ep_adapter import PyEnergyPlusSimulator
 from src.mcp_server.server import create_mcp_server
 from src.agent.loop import run_agent_loop
 from src.websocket_server.server import start_websocket_server
@@ -57,8 +57,12 @@ async def main():
     logger.info("Configuration loaded. LLM model: %s", config.llm.model)
 
     # 1. Initialize Simulator
-    simulator = BuildingSimulator()
-    logger.info("Simulator initialized.")
+    idf_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "simulation", "expanded.idf"))
+    epw_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "simulation", "weather.epw"))
+    
+    simulator = PyEnergyPlusSimulator(idf_path, epw_path, config.zones)
+    simulator.start()
+    logger.info("Simulator initialized and EnergyPlus thread started.")
 
     # 2. Create MCP Server
     mcp_server = create_mcp_server(simulator, config)

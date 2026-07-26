@@ -50,7 +50,21 @@ frontend/dist/
 *.rdd
 *.mdd
 *.csv
+*.dbg
+*.audit
+*.bnd
+*.eio
+*.mtd
+*.mtr
+*.shd
+*.sln
+*.htm
 !config/*.json
+
+# Keep core simulation files
+!simulation/expanded.idf
+!simulation/weather.epw
+simulation/ep_output/
 
 # ==========================
 # IDE / OS
@@ -70,3 +84,5 @@ Thumbs.db
 .env
 .env.*
 info/
+tasks.md
+migration.md

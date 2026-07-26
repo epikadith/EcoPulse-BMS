@@ -1,15 +1,15 @@
 import json
 from mcp.server.fastmcp import FastMCP
-from src.simulator.building import BuildingSimulator
+from src.simulator.ep_adapter import PyEnergyPlusSimulator
 from src.config.settings import Config
 from src.validation.validator import validate_action
 
-def create_mcp_server(simulator: BuildingSimulator, config: Config) -> FastMCP:
+def create_mcp_server(simulator: PyEnergyPlusSimulator, config: Config) -> FastMCP:
     """
     Creates and configures an MCP server exposing building simulator controls.
     
     Args:
-        simulator: The BuildingSimulator instance
+        simulator: The PyEnergyPlusSimulator instance
         config: System configuration
         
     Returns:
@@ -20,7 +20,11 @@ def create_mcp_server(simulator: BuildingSimulator, config: Config) -> FastMCP:
     @mcp.tool()
     def get_building_status() -> str:
         """Returns all current zone metrics, weather, and energy data."""
-        return json.dumps(simulator.get_metrics())
+        # When querying the status, we don't return it from the simulator anymore because
+        # the status is pushed by the simulator thread.
+        # However, for MCP tool consistency, we can return the last known state.
+        # But wait! We will handle state fetching in loop.py directly.
+        return json.dumps({"status": "handled_by_orchestrator"})
 
     @mcp.tool()
     def set_hvac_temperature(zone: str, setpoint: float) -> str:
@@ -35,8 +39,7 @@ def create_mcp_server(simulator: BuildingSimulator, config: Config) -> FastMCP:
         if not is_valid:
             return json.dumps({"success": False, "error": reason})
         try:
-            res = simulator.apply_action(zone, "set_hvac_temperature", setpoint)
-            return json.dumps(res)
+            return json.dumps({"success": True, "zone": zone, "action": "set_hvac_temperature", "value": setpoint})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 
@@ -53,8 +56,7 @@ def create_mcp_server(simulator: BuildingSimulator, config: Config) -> FastMCP:
         if not is_valid:
             return json.dumps({"success": False, "error": reason})
         try:
-            res = simulator.apply_action(zone, "adjust_ventilation", rate)
-            return json.dumps(res)
+            return json.dumps({"success": True, "zone": zone, "action": "adjust_ventilation", "value": rate})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 
@@ -71,8 +73,7 @@ def create_mcp_server(simulator: BuildingSimulator, config: Config) -> FastMCP:
         if not is_valid:
             return json.dumps({"success": False, "error": reason})
         try:
-            res = simulator.apply_action(zone, "set_shading", position)
-            return json.dumps(res)
+            return json.dumps({"success": True, "zone": zone, "action": "set_shading", "value": position})
         except Exception as e:
             return json.dumps({"success": False, "error": str(e)})
 

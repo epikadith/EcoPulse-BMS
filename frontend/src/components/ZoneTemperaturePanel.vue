@@ -23,7 +23,7 @@ const chartOptions = {
   },
   colors: ['#06b6d4', '#3b82f6'], 
   xaxis: {
-    categories: ['South', 'North', 'Core'],
+    categories: ['Space 1', 'Space 2', 'Space 3', 'Space 4', 'Space 5'],
     labels: { style: { colors: '#94a3b8' }, textTransform: 'capitalize' },
     axisBorder: { show: false },
     axisTicks: { show: false }
@@ -43,11 +43,11 @@ const series = computed(() => {
   return [
     {
       name: 'Current Temp',
-      data: [z.south?.indoor_temp || 0, z.north?.indoor_temp || 0, z.core?.indoor_temp || 0]
+      data: [z['space1-1']?.indoor_temp || 0, z['space2-1']?.indoor_temp || 0, z['space3-1']?.indoor_temp || 0, z['space4-1']?.indoor_temp || 0, z['space5-1']?.indoor_temp || 0]
     },
     {
       name: 'Setpoint',
-      data: [z.south?.hvac_setpoint || 0, z.north?.hvac_setpoint || 0, z.core?.hvac_setpoint || 0]
+      data: [z['space1-1']?.hvac_setpoint || 0, z['space2-1']?.hvac_setpoint || 0, z['space3-1']?.hvac_setpoint || 0, z['space4-1']?.hvac_setpoint || 0, z['space5-1']?.hvac_setpoint || 0]
     }
   ]
 })

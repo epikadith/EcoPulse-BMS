@@ -6,9 +6,13 @@ export const useMetricsStore = defineStore('metrics', {
     energyHistory: [],  // Time-series data for energy consumption
     carbonHistory: [],  // Time-series data for carbon emissions
     agentLogs: [],      // Array of reasoning actions
-    maxHistory: 100     // Limit to prevent memory bloat
+    maxHistory: 100,    // Limit to prevent memory bloat
+    agentStatus: 'idle' // 'idle' or 'thinking'
   }),
   actions: {
+    setAgentStatus(status) {
+      this.agentStatus = status
+    },
     updateMetrics(metrics) {
       this.latestMetrics = metrics
       

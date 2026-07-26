@@ -45,7 +45,7 @@ class Config:
     llm: LLMConfig = field(default_factory=LLMConfig)
     optimization: OptimizationConfig = field(default_factory=OptimizationConfig)
     control_loop: ControlLoopConfig = field(default_factory=ControlLoopConfig)
-    zones: list[str] = field(default_factory=lambda: ["south", "north", "core"])
+    zones: list[str] = field(default_factory=lambda: ["space1-1", "space2-1", "space3-1", "space4-1", "space5-1"])
     constraints: ConstraintsConfig = field(default_factory=ConstraintsConfig)
     websocket: WebsocketConfig = field(default_factory=WebsocketConfig)
 
