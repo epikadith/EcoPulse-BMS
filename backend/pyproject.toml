@@ -1,0 +1,21 @@
+[project]
+name = "ecopulse-backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.28.1",
+    "ollama>=0.6.2",
+    "polars>=1.43.0",
+    "websockets>=16.1.1",
+]
+
+[project.scripts]
+ecopulse = "src.main:main_entry"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "anyio>=4.0.0",
+]
