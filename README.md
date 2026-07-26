@@ -1,4 +1,5 @@
-# EcoPulse: Intelligent Building Management System
+# EcoPulse: Intelligent Building Management System 🌍⚡
+**Version 1.0.0 (Hackathon Submission)**
 
 EcoPulse is a state-of-the-art Agentic AI Building Management System. It pairs a sophisticated deterministic thermal physics simulator with an autonomous LLM reasoning agent capable of optimizing building energy consumption while maintaining optimal thermal comfort (ISO 7730 PMV standards).
 
@@ -7,12 +8,12 @@ EcoPulse is a state-of-the-art Agentic AI Building Management System. It pairs a
 ```mermaid
 graph TD
     A[Frontend Dashboard<br/>Vue.js + ApexCharts] <-->|WebSocket| B(WebSocket Server)
-    B --> C[Agent Orchestrator<br/>Polars Data Pipeline]
+    B --> C[Agent Orchestrator<br/>Reactive Agent Loop]
     C -->|Prompt| D[Ollama LLM<br/>Gemma 4 E4B]
     D -->|JSON Actions| E[Parser + Validator]
-    E -->|Tool Calls| F[FastMCP Server]
-    F --> G[Thermal Physics Simulator<br/>3-Zone Building]
-    G -->|Metrics| C
+    E -->|Tool Calls| F[MCP Server]
+    F --> G[EnergyPlus Co-Simulation<br/>PyEnergyPlus API]
+    G -->|Real-time Metrics| C
     H[Config Module<br/>default.json] -.-> C
     H -.-> E
     H -.-> F
@@ -55,9 +56,9 @@ You will immediately see the intelligent agent receiving real-time telemetry fro
 ```
 backend/
   src/
-    simulator/       # 3-zone thermal physics simulator (mock EnergyPlus)
-    mcp_server/      # FastMCP tool server (get_building_status, set_hvac, etc.)
-    agent/           # LLM orchestrator, prompt builder, parser, Polars pipeline
+    simulator/       # True EnergyPlus co-simulation adapter (ep_adapter.py)
+    mcp_server/      # MCP tool server exposing EnergyPlus control tools
+    agent/           # LLM orchestrator, reactive loop, constraint bounds
     websocket_server/# Real-time broadcast to frontend clients
     config/          # JSON config loader with env var overrides
     validation/      # Safety constraint enforcement layer
@@ -73,13 +74,12 @@ config/
 
 ## Features
 
-- **Physics-Based Thermal Simulator:** Simulates solar irradiance, dynamic occupancy loads, thermal mass delay, and outdoor diurnal temperature swings across 3 zones (South, North, Core).
+- **EnergyPlus Co-Simulation Engine:** Replaces mock engines with an actual EnergyPlus (`pyenergyplus`) 5-zone commercial building simulation (`expanded.idf`). It dynamically reads accurate weather data (`weather.epw`) and physical thermal interactions.
 - **MCP Server (Model Context Protocol):** Abstracts the building controls into validated JSON-schema tools (`set_hvac_temperature`, `adjust_ventilation`, `set_shading`) using the `mcp` SDK.
-- **Safety Validation Layer:** Every LLM-generated command passes through constraint enforcement (temperature 20–24°C, ventilation 0–100%, shading 0–100%) before execution.
-- **Polars Data Pipeline:** Raw simulator metrics are structured into typed Polars DataFrames for analysis and compact, token-efficient LLM prompting.
-- **Agentic Reasoning Loop:** A local LLM evaluates the state space every 15 virtual minutes, with both fixed-interval and threshold-triggered reactive modes. Balances PMV comfort indices against carbon emission targets.
-- **Glassmorphism Live UI:** Real-time metrics streaming over WebSockets, visualizing energy consumption, carbon footprint trends, zone temperatures, comfort indices, HVAC status, and the LLM's chain-of-thought reasoning via Pinia state management and Vue3-ApexCharts.
-- **Structured JSON Logging:** Production-ready structured log output for observability and debugging.
+- **Safety Validation Layer:** Every LLM-generated command passes through strict constraint enforcement (e.g. bounding PMV thermal comfort) before injection back into EnergyPlus.
+- **Agentic Reasoning Loop:** A local LLM evaluates the state space natively. It utilizes a Reactive Control Loop to only invoke LLM queries when threshold comfort metrics trigger, severely reducing latency.
+- **Glassmorphism Live UI:** Real-time metrics streaming over WebSockets, visualizing true Facility Power consumption, carbon footprint trends, zone temperatures, PMV comfort indices, and LLM's chain-of-thought reasoning via Pinia and Vue3-ApexCharts.
+- **Structured JSON Logging:** Production-ready structured log output for observability and debugging of simulation runs.
 
 ## Configuration
 
@@ -99,12 +99,10 @@ All system parameters are configurable via `config/default.json`:
 cd backend && uv run pytest -v
 ```
 
-The test suite includes **74 tests** covering:
-- Thermal simulator physics (22 tests)
-- Configuration loading & validation (6 tests)
-- Safety constraint enforcement (8 tests)
-- MCP tool registration & execution (4 tests)
-- Agent prompt building, LLM parsing, Polars pipeline, orchestrator (23 tests)
-- WebSocket server connectivity & broadcast (3 tests)
-- Full backend integration with mocked LLM (2 tests)
-- And 6 more across remaining modules
+The test suite thoroughly validates:
+- True EnergyPlus co-simulation tracking and API data scraping
+- Energy consumption metrics dynamically tracking Facility Power
+- Configuration loading & validation
+- Safety constraint enforcement
+- Agent prompt building, LLM parsing, and the reactive orchestrator
+- WebSocket server connectivity & broadcast

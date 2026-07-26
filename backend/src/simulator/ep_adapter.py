@@ -58,7 +58,7 @@ class PyEnergyPlusSimulator:
     def _run_energyplus(self):
         """The blocking EnergyPlus run call."""
         # Register callbacks
-        self.api.runtime.callback_begin_zone_timestep_after_init_heat_balance(self.state, self._timestep_callback)
+        self.api.runtime.callback_end_system_timestep_after_hvac_reporting(self.state, self._timestep_callback)
         self.api.runtime.callback_inside_system_iteration_loop(self.state, self._system_iteration_callback)
         
         logger.info(f"Starting EnergyPlus simulation with {self.idf_path}")
@@ -75,6 +75,14 @@ class PyEnergyPlusSimulator:
         # Temporarily disable standard output printing from E+ to keep console clean
         self.api.runtime.set_console_output_status(self.state, False)
         
+        # --- CRITICAL: Request specific variables to be tracked by the API ---
+        logger.info("Requesting HVAC and environment variables from API...")
+        self.api.exchange.request_variable(self.state, "Site Outdoor Air Drybulb Temperature", "Environment")
+        self.api.exchange.request_variable(self.state, "Site Outdoor Air Relative Humidity", "Environment")
+        self.api.exchange.request_variable(self.state, "Facility Total Purchased Electricity Rate", "Whole Building")
+        for zone in self.zones:
+            self.api.exchange.request_variable(self.state, "Zone Mean Air Temperature", zone.upper())
+        
         result = self.api.runtime.run_energyplus(self.state, cmd_args)
         if result != 0:
             logger.error(f"EnergyPlus simulation failed with code {result}")
@@ -82,12 +90,17 @@ class PyEnergyPlusSimulator:
             logger.info("EnergyPlus simulation completed successfully.")
 
     def _timestep_callback(self, state):
-        """Called by EnergyPlus at each zone timestep."""
         if self.api.exchange.warmup_flag(state):
             return
             
+        # Ignore Design Days (kind == 1). We only care about the actual Run Period.
+        kind = self.api.exchange.kind_of_sim(state)
+        if kind == 1:
+            return
+        
         if not self.warmup_complete:
-            logger.info("EnergyPlus warmup complete. Beginning active co-simulation.")
+            self.warmup_complete = True
+            logger.info("Warmup and Design Days complete. Starting active simulation tracking.")
             self.warmup_complete = True
             self._get_handles(state)
             
@@ -145,8 +158,8 @@ class PyEnergyPlusSimulator:
         self.sensor_handles["out_temp"] = self.api.exchange.get_variable_handle(state, "Site Outdoor Air Drybulb Temperature", "Environment")
         self.sensor_handles["out_hum"] = self.api.exchange.get_variable_handle(state, "Site Outdoor Air Relative Humidity", "Environment")
         
-        # Try to get the facility electricity meter
-        self.sensor_handles["hvac_power"] = self.api.exchange.get_meter_handle(state, "Electricity:Facility")
+        # Energy Variables (Watts)
+        self.sensor_handles["elec_power"] = self.api.exchange.get_variable_handle(state, "Facility Total Purchased Electricity Rate", "Whole Building")
         
         # Zones
         for zone in self.zones:
@@ -157,37 +170,48 @@ class PyEnergyPlusSimulator:
         self.actuator_handles["htg_setp"] = self.api.exchange.get_actuator_handle(state, "Schedule:Compact", "Schedule Value", "Htg-SetP-Sch")
         self.actuator_handles["clg_setp"] = self.api.exchange.get_actuator_handle(state, "Schedule:Compact", "Schedule Value", "Clg-SetP-Sch")
         
-        # Log any missing handles
+        # Log any missing handles and confirm found handles (Debug Tests)
+        missing = False
         for k, v in self.sensor_handles.items():
             if v == -1:
                 logger.error(f"Missing sensor handle for {k}")
+                missing = True
+            else:
+                logger.info(f"Verified sensor handle: {k} = {v}")
+                
         for k, v in self.actuator_handles.items():
             if v == -1:
                 logger.error(f"Missing actuator handle for {k}")
+                missing = True
+            else:
+                logger.info(f"Verified actuator handle: {k} = {v}")
+                
+        if not missing:
+            logger.info("All EnergyPlus API variables successfully hooked and verified!")
 
     def _read_metrics(self, state) -> dict:
         """Reads current state from E+ and formats it like the old simulator."""
         out_temp = self.api.exchange.get_variable_value(state, self.sensor_handles["out_temp"]) if self.sensor_handles["out_temp"] != -1 else 22.0
         out_hum = self.api.exchange.get_variable_value(state, self.sensor_handles["out_hum"]) if self.sensor_handles["out_hum"] != -1 else 50.0
         
-        # Handle meter or fallback
-        if self.sensor_handles["hvac_power"] != -1:
-            hvac_power_w = self.api.exchange.get_meter_value(state, self.sensor_handles["hvac_power"])
-        else:
-            hvac_power_w = 0.0
+        # Calculate total power in Watts
+        elec_w = self.api.exchange.get_variable_value(state, self.sensor_handles["elec_power"]) if self.sensor_handles.get("elec_power", -1) != -1 else 0.0
         
-        hvac_power_kw = hvac_power_w / 1000.0 if hvac_power_w > 0 else 0.0
+        hvac_power_w = elec_w
+        hvac_power_kw = hvac_power_w / 1000.0
         
         time_step = self.api.exchange.zone_time_step_number(state)
+        dt_hours = self.api.exchange.zone_time_step(state) # Fraction of an hour
+        
+        joules_this_timestep = hvac_power_w * (dt_hours * 3600.0)
+        
         hour = self.api.exchange.hour(state)
         minute = self.api.exchange.minutes(state)
         
         self.sim_time_minutes = hour * 60 + minute
         self.day = self.api.exchange.day_of_year(state)
         
-        # Energy tracking
-        dt_hours = self.api.exchange.zone_time_step(state) # Fraction of an hour
-        self.cumulative_energy_j += hvac_power_w * (dt_hours * 3600)
+        self.cumulative_energy_j += joules_this_timestep
         cumulative_kwh = self.cumulative_energy_j / 3600000.0
         self.baseline_energy_kwh += 0.5 * dt_hours # Mock baseline for now
         
